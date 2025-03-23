@@ -1,27 +1,46 @@
-from django.shortcuts import render , get_object_or_404
-from django.http import JsonResponse
-from .serializers import ProductSerializer , OrderSerializer
+from .serializers import ProductSerializer , OrderSerializer , ProductInfoSerializer
 from .models import Product , Order , OrderItem
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-
-@api_view(["GET"])
-def product_list(request):
-    products = Product.objects.all()
-    serial = ProductSerializer(products , many=True)
-    return Response(serial.data , status=status.HTTP_200_OK)
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from django.db.models import Max
 
 
-@api_view(['GET'])
-def product_detail(request , pk):
-    product = get_object_or_404(Product , pk=pk)
-    serial = ProductSerializer(product)
-    return Response(serial.data , status=status.HTTP_200_OK)
+class productList(generics.ListAPIView):
+    queryset = Product.objects.filter(stock__gt=0)
+    serializer_class = ProductSerializer
 
 
-@api_view(["GET"])
-def order_list(request):
-    orders = Order.objects.prefetch_related("items").all()
-    serial = OrderSerializer(orders , many=True)
-    return Response(serial.data , status=status.HTTP_200_OK)
+class productDetails(generics.RetrieveAPIView):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+
+
+class orderList(generics.ListAPIView):
+    queryset = Order.objects.prefetch_related("items").all()
+    serializer_class = OrderSerializer
+
+
+class UserOrderList(generics.ListAPIView):
+    queryset = Order.objects.prefetch_related("items").all()
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qr = super().get_queryset()
+        return qr.filter(user=user)
+
+class ProductInfo(APIView):
+    def get(self , request):
+        products = Product.objects.all()
+        serial = ProductInfoSerializer({
+            'products': products,
+            'count': len(products),
+            'maxPrice': products.aggregate(maxPrice=Max('price'))['maxPrice']
+        })
+        return Response(serial.data)
+
